@@ -1,0 +1,12 @@
+numpy>=1.24
+scipy>=1.10
+evo>=1.28
+pytest>=7.0
+
+# Optional, only needed for scripts/run_on_waymo.py:
+# tensorflow==<version matching the waymo-open-dataset build below>
+# waymo-open-dataset-tf-<matching version>
+#   See https://github.com/waymo-research/waymo-open-dataset for the
+#   TensorFlow/package version matrix. Requires accepting Waymo's license
+#   and downloading segments separately - not installable/testable in every
+#   environment (e.g. it does not build against Python 3.12).

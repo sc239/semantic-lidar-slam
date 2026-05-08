@@ -18,7 +18,7 @@ import numpy as np
 
 from .icp import estimate_normals, point_to_plane_icp
 from .pointcloud import LidarScan, voxel_downsample
-from .semantic import remove_dynamic_points
+from .semantic import SEMANTIC_KITTI_DYNAMIC_CLASSES, remove_dynamic_points
 
 
 @dataclass
@@ -28,6 +28,12 @@ class OdometryConfig:
     max_iterations: int = 30
     use_constant_velocity_init: bool = True
     filter_dynamic_points: bool = True
+    # Which semantic label scheme `filter_dynamic_points` should treat as
+    # dynamic. Defaults to SemanticKITTI ids for backward compatibility, but
+    # MUST be overridden (e.g. with waymo_loader.WAYMO_DYNAMIC_CLASSES) when
+    # feeding in scans whose labels come from a different dataset - label id
+    # numbers are not comparable across schemes.
+    dynamic_class_ids: set[int] = field(default_factory=lambda: set(SEMANTIC_KITTI_DYNAMIC_CLASSES))
 
 
 @dataclass
@@ -56,7 +62,7 @@ class SemanticLidarOdometry:
     def _preprocess(self, scan: LidarScan) -> tuple[np.ndarray, int]:
         n_before = len(scan)
         if self.config.filter_dynamic_points:
-            scan = remove_dynamic_points(scan)
+            scan = remove_dynamic_points(scan, dynamic_class_ids=self.config.dynamic_class_ids)
         n_removed = n_before - len(scan)
 
         points = voxel_downsample(scan.points, self.config.voxel_size)
