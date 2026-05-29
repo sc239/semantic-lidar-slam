@@ -78,6 +78,49 @@ modest — the 35% ATE figure was measured on real trajectories, not this
 synthetic demo — since the synthetic scene has cleaner geometry and a
 larger, more disruptive single dynamic object relative to scene size.)
 
+## Using with real Waymo Open Dataset scenes
+
+`src/slam/waymo_loader.py` loads a Waymo `.tfrecord` segment into the same
+`LidarScan` type the rest of the pipeline already uses, so odometry/mapping/
+evaluation don't change at all.
+
+```bash
+# 1. Accept Waymo's license and download a segment:
+#    https://waymo.com/open/download/
+gsutil cp gs://waymo_open_dataset_v_1_4_3/individual_files/training/<segment>.tfrecord .
+
+# 2. Install the matching TensorFlow + waymo-open-dataset build
+#    (see requirements.txt - the version pin is finicky and did not build
+#    against Python 3.12 in this repo's own dev environment)
+pip install tensorflow waymo-open-dataset-tf-<matching-version>
+
+# 3. Run
+python scripts/run_on_waymo.py --tfrecord <segment>.tfrecord --compare
+```
+
+**Important - label schemes are not interchangeable.** Waymo's per-point
+segmentation ids (`waymo_loader.WAYMO_DYNAMIC_CLASSES`) use different numbers
+for different classes than SemanticKITTI's
+(`semantic.SEMANTIC_KITTI_DYNAMIC_CLASSES`) - e.g. Waymo's `TYPE_POLE = 10`
+is a *static* class, while SemanticKITTI's id `10` means `car`, a *dynamic*
+one. `OdometryConfig.dynamic_class_ids` defaults to the SemanticKITTI set for
+backward compatibility, so it **must** be set to `WAYMO_DYNAMIC_CLASSES`
+when feeding in Waymo-labelled scans, or the filter will silently strip real
+static geometry instead of dynamic objects. `run_on_waymo.py` does this
+correctly; `tests/test_odometry_config.py` has a regression test
+demonstrating the failure mode this guards against.
+
+Also note: Waymo only provides per-point segmentation labels for a subset of
+frames in a segment. Unlabelled frames still contribute to odometry, just
+without dynamic-object filtering on that frame (`LidarScan.labels` is
+`None`, and `remove_dynamic_points` passes such scans through unfiltered).
+
+**This loader has not been run against a real Waymo segment in this
+repository's own development/test environment** (no licensed `.tfrecord`
+file, and `waymo-open-dataset-tf-*` doesn't install cleanly on Python
+3.12). It's written against Waymo's documented `frame_utils` API but should
+be validated against one real segment before being relied on.
+
 ## Using with real (Semantic)KITTI data
 
 ```python
@@ -118,18 +161,21 @@ ATE can miss).
 ```
 src/slam/
   pointcloud.py   # I/O + voxel downsampling + outlier removal
-  semantic.py     # dynamic-class filtering
+  semantic.py     # dynamic-class filtering (SemanticKITTI ids)
+  waymo_loader.py # Waymo Open Dataset .tfrecord -> LidarScan (Waymo ids)
   icp.py          # point-to-plane ICP
   odometry.py     # scan-to-scan odometry pipeline
   mapping.py      # incremental voxel map
-  evaluation.py   # ATE / RPE metrics
+  evaluation.py   # ATE / RPE metrics (evo-backed)
 scripts/
   generate_synthetic_data.py
   run_demo.py
+  run_on_waymo.py
 tests/
   test_icp.py
   test_semantic.py
   test_evaluation.py
+  test_odometry_config.py
 ```
 
 ## Limitations / possible extensions
